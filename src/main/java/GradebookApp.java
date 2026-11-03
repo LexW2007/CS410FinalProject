@@ -48,6 +48,7 @@ class GradebookApp {
         return v == null ? dflt : v;
     }
 
+    // runs a shell command
     void run() throws IOException {
         BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
         while (true) {
@@ -63,6 +64,50 @@ class GradebookApp {
             }
         }
         System.out.println("Bye");
+    }
+
+    // Splits a line into tokens; double-quotes text stays together as one argument
+    private static List<String> tokenize(String line) throws CmdException {
+        List<String> out = new ArrayList<>();
+        StringBuilder cur = new StringBuilder();
+        boolean inQuotes = false, have = false;
+
+        for (char ch : line.toCharArray()) {
+            if (ch == '"') {
+                inQuotes = !inQuotes;
+                have = true;
+            } else if (Character.isWhitespace(ch) && !inQuotes) {
+                if (have) {
+                    out.add(cur.toString());
+                    cur.setLength(0);
+                    have = false;
+                }
+            } else {
+                cur.append(ch);
+                have = true;
+            }
+        }
+        if (inQuotes) throw new CmdException("unclosed quote");
+        if (have) out.add(cur.toString());
+        return out;
+    }
+
+    // Parses one line. Returns false when the user wants to quit.
+    private boolean processCommand(String line) throws CmdException, SQLException {
+        List<String> tokens = tokenize(line);
+        if (tokens.isEmpty()) return true;
+        String cmd = tokens.get(0);
+        if (cmd.equals("quit") || cmd.equals("exit")) return false;
+
+        commands(cmd, tokens.subList(1, tokens.size()));
+        return true;
+    }
+
+    // Returns only the first line of an exception message
+    private static String firstLine(String msg) {
+        if (msg == null) return "unknown error";
+        int i = msg.indexOf('\n');
+        return (i < 0) ? msg : msg.substring(0, i);
     }
 
      private void commands(String cmd, List<String> a) throws CmdException, SQLException {
@@ -163,7 +208,7 @@ class GradebookApp {
     }
 
     private void addAssignment(List<String> a) throws CmdException, SQLException {
-        need(a, 3, "add-assignment <name> <category> <points>");
+        need(a, 3, "add-assignment <name> <category> <points> <description>");
         if (classId == -1) throw new CmdException("no class selected");
         String name = a.get(0);
         String category = a.get(1);
@@ -198,6 +243,12 @@ class GradebookApp {
         System.out.println("added student " + firstName + " " + lastName);
     }
 
+    private void studentGrades(List<String> a) throws CmdException, SQLException {
+        need(a, 1, "student-grades <username>");
+        if (classId == -1) throw new CmdException("no class selected");
+
+    }
+
     private void help(List<String> a) throws CmdException {
         need(a, 0, "help");
         System.out.println("Available commands:");
@@ -210,5 +261,31 @@ class GradebookApp {
         System.out.println("  add-student <first_name> <last_name>");
         System.out.println("  help");
         System.out.println("  exit");
+    }
+
+    // Throws a usage error unless exactly n arguments were given
+    private static void need(List<String> a, int n, String usage) throws CmdException {
+        if (a.size() != n) throw new CmdException("usage: " + usage);
+    }
+
+    // For commands that take optional arguments
+    private static void needRange(List<String> a, int min, int max, String usage) throws CmdException {
+        if (a.size() < min || a.size() > max) throw new CmdException("usage: " + usage);
+    }
+
+    private static int parseInt(String s, String arg) throws CmdException {
+        try { return Integer.parseInt(s); }
+        catch (NumberFormatException e) { throw new CmdException(arg + " must be an integer."); }
+    }
+
+    private static BigDecimal parseBigDecimal(String s, String arg) throws CmdException {
+        try { return new BigDecimal(s); }
+        catch (NumberFormatException e) { throw new CmdException(arg + " must be a number."); }
+    }
+
+    // Translates a duplicate-key error (MySql code 1062) into a friendly message
+    private static CmdException dupOr(SQLException e, String dupMsg) {
+        if (e.getErrorCode() == 1062) return new CmdException(dupMsg);
+        return new CmdException(firstLine(e.getMessage()));
     }
 }
