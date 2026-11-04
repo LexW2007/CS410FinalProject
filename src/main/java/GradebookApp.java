@@ -28,10 +28,9 @@ class GradebookApp {
     GradebookApp(Connection conn) { this.conn = conn; }
     
     public static void main(String[] args) throws Exception {
-        String url = "jdbc:mysql://127.0.0.1:56822/gradebook";
-        String username = "msandbox";
-        String password = "lexwatts";
-        String query = "select * from student"; // Query to be run
+        String url = env("GRADEBOOK_URL", "jdbc:mysql://127.0.0.1:56822/gradebook");
+        String username = env("GRADEBOOK_USER", "root");
+        String password = env("GRADEBOOK_PASSWORD", "");
 
         Class.forName("com.mysql.cj.jdbc.Driver");
         try (Connection c = DriverManager.getConnection(url, username, password)) {
@@ -110,6 +109,7 @@ class GradebookApp {
         return (i < 0) ? msg : msg.substring(0, i);
     }
 
+    // runs the specific command called
      private void commands(String cmd, List<String> a) throws CmdException, SQLException {
         switch (cmd) {
             case "new-class":      newClass(a);      break;
@@ -124,6 +124,7 @@ class GradebookApp {
         }
     }
 
+    // new-class command
      private void newClass(List<String> a) throws CmdException, SQLException {
         need(a, 4, "new-class <course> <term> <section> \"<description>\"");
         String term = a.get(1);
@@ -144,6 +145,7 @@ class GradebookApp {
         System.out.println("created class " + a.get(0) + " " + term + " section " + section);
     }
 
+    // list-classes command
     private void listClasses(List<String> a) throws CmdException, SQLException {
         need(a, 0, "list-classes");
         String sql = "SELECT course_num, term, section_num, class_desc FROM class ORDER BY course_num, term, section_num";
@@ -159,6 +161,7 @@ class GradebookApp {
         }
     }
 
+    // select-class command
     private void selectClass(List<String> a) throws CmdException, SQLException {
         need(a, 3, "select-class <course> <term> <section>");
         String sql = "SELECT class_id, class_desc FROM class WHERE course_num = ? AND term = ? AND section_num = ?";
@@ -174,6 +177,7 @@ class GradebookApp {
         }
     }
 
+    // show-class command
     private void showClass(List<String> a) throws CmdException, SQLException {
         need(a, 0, "show-class");
         if (classId == -1) throw new CmdException("no class selected");
@@ -190,6 +194,7 @@ class GradebookApp {
         }
     }
 
+    // add-category command
     private void addCategory(List<String> a) throws CmdException, SQLException {
         need(a, 2, "add-category <name> <weight>");
         if (classId == -1) throw new CmdException("no class selected");
@@ -207,6 +212,7 @@ class GradebookApp {
         System.out.println("added category " + name + " with weight " + weight);
     }
 
+    // add-assignment command
     private void addAssignment(List<String> a) throws CmdException, SQLException {
         need(a, 3, "add-assignment <name> <category> <points> <description>");
         if (classId == -1) throw new CmdException("no class selected");
@@ -226,6 +232,7 @@ class GradebookApp {
         System.out.println("added assignment " + name + " in category " + category + " with points " + points);
     }
 
+    // add-student command
     private void addStudent(List<String> a) throws CmdException, SQLException {
         need(a, 2, "add-student <first_name> <last_name>");
         if (classId == -1) throw new CmdException("no class selected");
@@ -243,12 +250,7 @@ class GradebookApp {
         System.out.println("added student " + firstName + " " + lastName);
     }
 
-    private void studentGrades(List<String> a) throws CmdException, SQLException {
-        need(a, 1, "student-grades <username>");
-        if (classId == -1) throw new CmdException("no class selected");
-
-    }
-
+    // help command
     private void help(List<String> a) throws CmdException {
         need(a, 0, "help");
         System.out.println("Available commands:");
@@ -273,11 +275,13 @@ class GradebookApp {
         if (a.size() < min || a.size() > max) throw new CmdException("usage: " + usage);
     }
 
+    // Parses an integer argument
     private static int parseInt(String s, String arg) throws CmdException {
         try { return Integer.parseInt(s); }
         catch (NumberFormatException e) { throw new CmdException(arg + " must be an integer."); }
     }
 
+    // Parses a Big Decimal argument
     private static BigDecimal parseBigDecimal(String s, String arg) throws CmdException {
         try { return new BigDecimal(s); }
         catch (NumberFormatException e) { throw new CmdException(arg + " must be a number."); }
