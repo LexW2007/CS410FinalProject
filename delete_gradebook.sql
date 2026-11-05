@@ -7,4 +7,3 @@ drop table if exists student;
 drop table if exists enrollment;
 drop table if exists category;
 drop table if exists class;
--- plus any other tables your script created
