@@ -11,15 +11,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 /* Gradebook application for managing student grades 
-    TODO: REVISE AND TEST
+   Connects to a MySQL database and provides a command-line interface 
+   for creating classes, adding categories, assignments, and students, 
+   and displaying class information.
 */
-class GradebookApp {
-
+public class GradebookApp {
     static class CmdException extends Exception {
         public CmdException(String message){
             super(message);
         }
     }
+
+    private static final int MYSQL_DUPLICATE_KEY = 1062; // MySQL error code for duplicate key
 
     private final Connection conn;
     private int classId = -1;          // -1: no class selected
@@ -31,7 +34,6 @@ class GradebookApp {
         String url = "jdbc:mysql://127.0.0.1:56822/gradebook";
         String username = "msandbox";
         String password = "lexwatts";
-        String query = "select * from student"; // Query to be run
 
         Class.forName("com.mysql.cj.jdbc.Driver");
         try (Connection c = DriverManager.getConnection(url, username, password)) {
@@ -43,28 +45,37 @@ class GradebookApp {
         }
     }
 
-    private static String env(String k, String dflt) {
-        String v = System.getenv(k);
-        return v == null ? dflt : v;
-    }
-
+    /*
+     * Main command loop.
+     */
     void run() throws IOException {
         BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
         while (true) {
-            System.out.print("> ");
+            System.out.print(classLabel == null ? "gradebook> " : "gradebook[" + classLabel + "]> ");
+            System.out.flush();
             String line = in.readLine();
-            if (line == null) break;
+            if (line == null) { System.out.println(); break; }   // Ctrl-D
+            line = line.trim();
+            if (line.isEmpty()) continue;
+
             try {
-                if (!processCommand(line)) break;
+                List<String> t = tokenize(line);
+                String cmd = t.get(0).toLowerCase();
+                List<String> a = t.subList(1, t.size());
+                if (cmd.equals("quit") || cmd.equals("exit")) break;
+                commands(cmd, a);
             } catch (CmdException e) {
-                System.err.println("error: " + e.getMessage());
+                System.out.println("error: " + e.getMessage());
             } catch (SQLException e) {
-                System.err.println("error: " + firstLine(e.getMessage()));
+                System.out.println("error: database problem: " + firstLine(e.getMessage()));
+            } catch (RuntimeException e) {
+                System.out.println("error: unexpected problem: " + e.getClass().getSimpleName());
             }
         }
-        System.out.println("Bye");
+        System.out.println("Bye.");
     }
 
+    // lists all commands
      private void commands(String cmd, List<String> a) throws CmdException, SQLException {
         switch (cmd) {
             case "new-class":      newClass(a);      break;
@@ -79,6 +90,7 @@ class GradebookApp {
         }
     }
 
+    // add a new class to the database
      private void newClass(List<String> a) throws CmdException, SQLException {
         need(a, 4, "new-class <course> <term> <section> \"<description>\"");
         String term = a.get(1);
@@ -99,6 +111,7 @@ class GradebookApp {
         System.out.println("created class " + a.get(0) + " " + term + " section " + section);
     }
 
+    // list all classes in the database
     private void listClasses(List<String> a) throws CmdException, SQLException {
         need(a, 0, "list-classes");
         String sql = "SELECT course_num, term, section_num, class_desc FROM class ORDER BY course_num, term, section_num";
@@ -114,6 +127,7 @@ class GradebookApp {
         }
     }
 
+    // select a class to work with
     private void selectClass(List<String> a) throws CmdException, SQLException {
         need(a, 3, "select-class <course> <term> <section>");
         String sql = "SELECT class_id, class_desc FROM class WHERE course_num = ? AND term = ? AND section_num = ?";
@@ -129,6 +143,7 @@ class GradebookApp {
         }
     }
 
+    // show the currently selected class
     private void showClass(List<String> a) throws CmdException, SQLException {
         need(a, 0, "show-class");
         if (classId == -1) throw new CmdException("no class selected");
@@ -145,6 +160,7 @@ class GradebookApp {
         }
     }
 
+    // add a new category to the currently selected class
     private void addCategory(List<String> a) throws CmdException, SQLException {
         need(a, 2, "add-category <name> <weight>");
         if (classId == -1) throw new CmdException("no class selected");
@@ -162,6 +178,7 @@ class GradebookApp {
         System.out.println("added category " + name + " with weight " + weight);
     }
 
+    // add an assignment to the currently selected class
     private void addAssignment(List<String> a) throws CmdException, SQLException {
         need(a, 3, "add-assignment <name> <category> <points>");
         if (classId == -1) throw new CmdException("no class selected");
@@ -181,6 +198,7 @@ class GradebookApp {
         System.out.println("added assignment " + name + " in category " + category + " with points " + points);
     }
 
+    // add a student to the current class
     private void addStudent(List<String> a) throws CmdException, SQLException {
         need(a, 2, "add-student <first_name> <last_name>");
         if (classId == -1) throw new CmdException("no class selected");
@@ -198,6 +216,7 @@ class GradebookApp {
         System.out.println("added student " + firstName + " " + lastName);
     }
 
+    // helper function to show all user commands
     private void help(List<String> a) throws CmdException {
         need(a, 0, "help");
         System.out.println("Available commands:");
@@ -209,6 +228,62 @@ class GradebookApp {
         System.out.println("  add-assignment <name> <category> <points>");
         System.out.println("  add-student <first_name> <last_name>");
         System.out.println("  help");
-        System.out.println("  exit");
+    }
+
+    // helper function to take a command line input and split into tokens, handling quoted strings
+    static List<String> tokenize(String line) throws CmdException {
+        List<String> out = new ArrayList<>();
+        StringBuilder cur = new StringBuilder();
+        boolean inQuote = false, have = false;
+        for (int i = 0; i < line.length(); i++) {
+            char ch = line.charAt(i);
+            if (ch == '"') {
+                inQuote = !inQuote;
+                have = true;                 // allows empty "" argument
+            } else if (Character.isWhitespace(ch) && !inQuote) {
+                if (have) { out.add(cur.toString()); cur.setLength(0); have = false; }
+            } else {
+                cur.append(ch);
+                have = true;
+            }
+        }
+        if (inQuote) throw new CmdException("unterminated quote");
+        if (have) out.add(cur.toString());
+        return out;
+    }
+
+    // helper function to check if the number of arguments matches the expected count
+    private static void need(List<String> a, int n, String usage) throws CmdException {
+        if (a.size() != n) throw new CmdException("usage: " + usage);
+    }
+
+    // helper function to parse an integer from a string, throwing a CmdException if parsing fails
+    private static int parseInt(String s, String name) throws CmdException {
+        try {
+            return Integer.parseInt(s);
+        } catch (NumberFormatException e) {
+            throw new CmdException(name + " must be an integer");
+        }
+    }
+
+    // helper function to parse a BigDecimal from a string, throwing a CmdException if parsing fails
+    private static BigDecimal parseBigDecimal(String s, String name) throws CmdException {
+        try {
+            return new BigDecimal(s);
+        } catch (NumberFormatException e) {
+            throw new CmdException(name + " must be a number");
+        }
+    }
+
+    // helper function to get the first line of a string, used for error messages
+    private static String firstLine(String s) {
+        int i = s.indexOf('\n');
+        return i == -1 ? s : s.substring(0, i);
+    }
+
+    // helper function to handle duplicate key SQL exceptions, throwing a CmdException with a custom message if the error code matches
+    private static CmdException dupOr(SQLException e, String dupMessage) throws SQLException {
+        if (e.getErrorCode() == MYSQL_DUPLICATE_KEY) return new CmdException(dupMessage);
+        throw e;
     }
 }

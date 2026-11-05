@@ -1,59 +1,63 @@
 CREATE DATABASE IF NOT EXISTS gradebook;
 USE gradebook;
 
-create table student (
-	student_id char(10) primary key,
-    student_name varchar(50),
-    username varchar(50)
+CREATE TABLE student (
+    student_id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    student_num VARCHAR(20) NOT NULL UNIQUE,
+    first_name VARCHAR(50) NOT NULL,
+    last_name VARCHAR(50) NOT NULL
 );
 
-create table class (
-	class_id char(10) primary key,
-    course_num integer,
-    term varchar(50),
-    section_num integer,
-    class_desc text
+CREATE TABLE class (
+    class_id INT AUTO_INCREMENT PRIMARY KEY,
+    course_num VARCHAR(20) NOT NULL,
+    term VARCHAR(50) NOT NULL,
+    section_num INT NOT NULL ,
+    class_desc TEXT,
+    CONSTRAINT unq_class UNIQUE (course_num, term, section_num)
 );
 
-create table enrollment (
-	student_id char(10) not null,
-    class_id char(10) not null,
-    
-    primary key (student_id, class_id),
-    foreign key (student_id) references student(student_id),
-    foreign key (class_id) references class(class_id)
+CREATE TABLE enrollment (
+    student_id INT NOT NULL,
+    class_id INT NOT NULL,
+
+    PRIMARY KEY (student_id, class_id),
+    FOREIGN KEY (student_id) REFERENCES student(student_id) ON DELETE CASCADE,
+    FOREIGN KEY (class_id) REFERENCES class(class_id) ON DELETE CASCADE
 );
 
-create table category (
-	class_id char(10) not null,
-    category_name varchar(50),
-    weight decimal,
-    
-    primary key (class_id, category_name),
-    foreign key (class_id) references class(class_id)
+CREATE TABLE category (
+    category_id INT AUTO_INCREMENT PRIMARY KEY, -- surrogate primary key
+    class_id INT NOT NULL,
+    category_name VARCHAR(50) NOT NULL,
+    weight DECIMAL(5, 2) NOT NULL,
+
+    CONSTRAINT unq_category_per_class UNIQUE (class_id, category_name),
+    FOREIGN KEY (class_id) REFERENCES class(class_id) ON DELETE CASCADE
 );
 
-create table assignment (
-	class_id char(10) not null,
-    assignment_name varchar(150),
-    category_name varchar(50),
-    assignment_desc text,
-    max_points integer,
-    
-    primary key (class_id, assignment_name),
-    foreign key (class_id) references class(class_id)
-		on delete cascade
+CREATE TABLE assignment (
+    assignment_id INT AUTO_INCREMENT PRIMARY KEY,
+    class_id INT NOT NULL,
+    category_id INT NOT NULL,
+    assignment_name VARCHAR(150) NOT NULL,
+    assignment_desc TEXT,
+    points DECIMAL(7, 2) NOT NULL,
+
+    CONSTRAINT unq_assignment_per_class UNIQUE (class_id, assignment_id),
+    FOREIGN KEY (class_id) REFERENCES class(class_id) ON DELETE CASCADE,
+    FOREIGN KEY (category_id) REFERENCES category(category_id) ON DELETE CASCADE
 );
 
-create table grade (
-    class_id char(10) not null,
-    student_id char(10) not null,
-    assignment_name varchar(150) not null,
-    points integer,
-    is_ungraded boolean,
+CREATE TABLE grade (
+    student_id INT NOT NULL,
+    class_id INT NOT NULL,
+    assignment_id INT NOT NULL,
+    points_earned DECIMAL(7, 2), -- NULL means ungraded
 
-    primary key (class_id, student_id, assignment_name),
-    foreign key (class_id) references class(class_id),
-    foreign key (student_id) references student(student_id),
-    foreign key (class_id, assignment_name) references assignment(class_id, assignment_name)
+    PRIMARY KEY (student_id, assignment_id),
+    FOREIGN KEY (student_id, class_id) REFERENCES enrollment(student_id, class_id)
+                   ON DELETE CASCADE,
+    FOREIGN KEY (class_id, assignment_id) REFERENCES assignment(class_id, assignment_id) ON DELETE CASCADE
 );
