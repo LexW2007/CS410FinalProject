@@ -45,7 +45,7 @@ CREATE TABLE assignment (
     assignment_desc TEXT,
     points DECIMAL(7, 2) NOT NULL,
 
-    CONSTRAINT unq_assignment_per_class UNIQUE (class_id, assignment_name),
+    CONSTRAINT unq_assignment_per_class UNIQUE (class_id, assignment_id),
     FOREIGN KEY (class_id) REFERENCES class(class_id) ON DELETE CASCADE,
     FOREIGN KEY (category_id) REFERENCES category(category_id) ON DELETE CASCADE
 );
@@ -59,7 +59,7 @@ CREATE TABLE grade (
     PRIMARY KEY (student_id, assignment_id),
     FOREIGN KEY (student_id, class_id) REFERENCES enrollment(student_id, class_id)
                    ON DELETE CASCADE,
-    FOREIGN KEY (assignment_id) REFERENCES assignment(assignment_id) ON DELETE CASCADE
+    FOREIGN KEY (class_id, assignment_id) REFERENCES assignment(class_id, assignment_id) ON DELETE CASCADE
 );
 
 -- Secondary index 1: helps with looking up all student grades for a given class

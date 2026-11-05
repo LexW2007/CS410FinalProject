@@ -119,6 +119,7 @@ class GradebookApp {
             case "add-category":   addCategory(a);   break;
             case "add-assignment": addAssignment(a); break;
             case "add-student":    addStudent(a);    break;
+            case "enroll-student": enrollStudent(a); break;
             case "help":           help(a);          break;
             default: throw new CmdException("unknown command '" + cmd + "' (try: help)");
         }
@@ -214,18 +215,25 @@ class GradebookApp {
 
     // add-assignment command
     private void addAssignment(List<String> a) throws CmdException, SQLException {
-        need(a, 3, "add-assignment <name> <category> <points> <description>");
+        need(a, 4, "add-assignment <name> <category> <points> <description>");
         if (classId == -1) throw new CmdException("no class selected");
         String name = a.get(0);
         String category = a.get(1);
         BigDecimal points = parseBigDecimal(a.get(2), "points");
-        String sql = "INSERT INTO assignment (class_id, assignment_name, category_name, points) VALUES (?, ?, ?, ?)";
+        String description = a.get(3);
+
+        String sql = "INSERT INTO assignment (class_id, category_id, assignment_name, assignment_desc, points) " +
+                     "SELECT ?, category_id, ?, ?, ? FROM category WHERE class_id = ? AND category_name = ?";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, classId);
             ps.setString(2, name);
-            ps.setString(3, category);
+            ps.setString(3, description);
             ps.setBigDecimal(4, points);
-            ps.executeUpdate();
+            ps.setInt(5, classId);
+            ps.setString(6, category);
+
+            int rows = ps.executeUpdate();
+            if (rows == 0) throw new CmdException("category " + category + " does not exist for this class");
         } catch (SQLException e) {
             throw dupOr(e, "assignment " + name + " already exists for this class");
         }
@@ -234,20 +242,43 @@ class GradebookApp {
 
     // add-student command
     private void addStudent(List<String> a) throws CmdException, SQLException {
-        need(a, 2, "add-student <first_name> <last_name>");
-        if (classId == -1) throw new CmdException("no class selected");
-        String firstName = a.get(0);
-        String lastName = a.get(1);
-        String sql = "INSERT INTO student (class_id, first_name, last_name) VALUES (?, ?, ?)";
+        need(a, 4, "add-student <username> <student-id> <first_name> <last_name>");
+//        if (classId == -1) throw new CmdException("no class selected");
+        String username = a.get(0);
+        String studentNum = a.get(1);
+        String firstName = a.get(2);
+        String lastName = a.get(3);
+        String sql = "INSERT INTO student (username, student_num, first_name, last_name) VALUES (?, ?, ?, ?)";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
-            ps.setInt(1, classId);
-            ps.setString(2, firstName);
-            ps.setString(3, lastName);
+            ps.setString(1, username);
+            ps.setString(2, studentNum);
+            ps.setString(3, firstName);
+            ps.setString(4, lastName);
             ps.executeUpdate();
         } catch (SQLException e) {
-            throw dupOr(e, "student " + firstName + " " + lastName + " already exists for this class");
+            throw dupOr(e, "student " + firstName + " " + lastName + " already exists");
         }
         System.out.println("added student " + firstName + " " + lastName);
+    }
+
+    private void enrollStudent(List<String> a) throws CmdException {
+        need(a, 1, "enroll-student <username>");
+        if (classId == -1) throw new CmdException("no class selected");
+        String username = a.get(0);
+
+        String sql = "INSERT INTO enrollment (student_id, class_id) " +
+                     "SELECT student_id, ? FROM student WHERE username = ?";
+
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, classId);
+            ps.setString(2, username);
+
+            int rows = ps.executeUpdate();
+            if (rows == 0) throw new CmdException("student " + username + " not found");
+        } catch (SQLException e) {
+            throw dupOr(e, "student id " + username + " is already enrolled in this class");
+        }
+        System.out.println("enrolled student " + username + " in class " + classLabel);
     }
 
     // help command
@@ -259,8 +290,9 @@ class GradebookApp {
         System.out.println("  select-class <course> <term> <section>");
         System.out.println("  show-class");
         System.out.println("  add-category <name> <weight>");
-        System.out.println("  add-assignment <name> <category> <points>");
-        System.out.println("  add-student <first_name> <last_name>");
+        System.out.println("  add-assignment <name> <category> <points> <description>");
+        System.out.println("  add-student <username> <student-id> <first_name> <last_name>");
+        System.out.println("  enroll-student <username>");
         System.out.println("  help");
         System.out.println("  exit");
     }
