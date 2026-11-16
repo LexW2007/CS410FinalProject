@@ -32,9 +32,9 @@ public class GradebookApp {
     GradebookApp(Connection conn) { this.conn = conn; }
     
     public static void main(String[] args) throws Exception {
-        String url = "jdbc:mysql://127.0.0.1:56822/gradebook";
-        String username = "msandbox";
-        String password = "lexwatts";
+        String url = env("GRADEBOOK_URL", "jdbc:mysql://127.0.0.1:56822/gradebook");
+        String username = env("GRADEBOOK_USER", "root");
+        String password = env("GRADEBOOK_PASSWORD", "");
 
         Class.forName("com.mysql.cj.jdbc.Driver");
         try (Connection c = DriverManager.getConnection(url, username, password)) {
@@ -46,6 +46,11 @@ public class GradebookApp {
         }
     }
 
+    private static String env(String k, String dflt) {
+        String v = System.getenv(k);
+        return v == null ? dflt : v;
+    }
+   
     /*
      * Main command loop
      */
