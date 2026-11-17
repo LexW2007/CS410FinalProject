@@ -33,8 +33,8 @@ public class GradebookApp {
     
     public static void main(String[] args) throws Exception {
         String url = env("GRADEBOOK_URL", "jdbc:mysql://127.0.0.1:56822/gradebook");
-        String username = env("GRADEBOOK_USER", "root");
-        String password = env("GRADEBOOK_PASSWORD", "");
+        String username = prompt("MySQL username: ", false);
+        String password = prompt("MySQL password: ", true);
 
         Class.forName("com.mysql.cj.jdbc.Driver");
         try (Connection c = DriverManager.getConnection(url, username, password)) {
@@ -44,6 +44,30 @@ public class GradebookApp {
             System.err.println("error: could not connect to database: " + firstLine(e.getMessage()));
             System.exit(1);
         }
+    }
+
+    // helper function to ask for a value at startup; the password is hidden when a real terminal is available
+    private static String prompt(String label, boolean hidden) throws IOException {
+        java.io.Console console = System.console();
+        if (console != null) {
+            if (hidden) {
+                char[] chars = console.readPassword(label);
+                return chars == null ? "" : new String(chars);
+            }
+            String line = console.readLine(label);
+            return line == null ? "" : line.trim();
+        }
+
+        // no console (ex: running inside an IDE): read straight from System.in, one byte at a time,
+        // so nothing is buffered away from the command loop's reader (the password will be visible)
+        System.out.print(label);
+        System.out.flush();
+        StringBuilder sb = new StringBuilder();
+        int ch;
+        while ((ch = System.in.read()) != -1 && ch != '\n') {
+            if (ch != '\r') sb.append((char) ch);
+        }
+        return sb.toString().trim();
     }
 
     private static String env(String k, String dflt) {
